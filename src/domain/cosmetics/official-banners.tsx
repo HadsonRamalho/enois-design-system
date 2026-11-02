@@ -77,4 +77,20 @@ export const OFFICIAL_BANNERS: Readonly<Record<string, OfficialBannerSpec>> = {
     count: 9,
     seed: 121,
   },
+  // Permanent Essenciais banners.
+  "banner-noite-limpa": {
+    sky: ["#0f172a", "#1e1b4b"],
+    ground: "#1e293b",
+    icons: ["estrela", "lua", "brilho"],
+    count: 9,
+    seed: 141,
+    y: [10, 54],
+  },
+  "banner-jardim": {
+    sky: ["#bae6fd", "#ecfdf5"],
+    ground: "#15803d",
+    icons: ["folha", "folhaEscura", "sol"],
+    count: 9,
+    seed: 151,
+  },
 };

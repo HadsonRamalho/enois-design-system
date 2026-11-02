@@ -30,7 +30,7 @@ export const SHOP_ITEMS: CosmeticShopItem[] = [
       name: item.name,
       description: item.description,
       priceLabel: String("priceFaiscas" in item ? item.priceFaiscas : FRAME_PRICE),
-      available: IN_SEASON.has(collection.id),
+      available: collection.id === "essenciais" || IN_SEASON.has(collection.id),
       purchasable: true,
     })),
   ),
@@ -77,7 +77,7 @@ export const SHOP_COLLECTIONS: CosmeticShopCollection[] = CATALOG_COLLECTIONS.ma
   (collection): CosmeticShopCollection => ({
     id: collection.id,
     name: collection.name,
-    available: IN_SEASON.has(collection.id),
+    available: collection.id === "essenciais" || IN_SEASON.has(collection.id),
     looks: CATALOG_LOOKS.filter((look) => look.collection === collection.id).map((look) => ({
       id: `look-${look.collection}`,
       title: look.title,

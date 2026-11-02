@@ -76,7 +76,8 @@ describe("seasonal cosmetics registries", () => {
   });
 
   it("finds every look item in the catalog", () => {
-    const ids = new Set(catalog.map((item) => item.id));
+    // A look may reuse the original frames, which live outside the seasonal collections.
+    const ids = new Set([...catalog.map((item) => item.id), ...SHOP_ITEMS.map((item) => item.id)]);
     for (const look of CATALOG_LOOKS) {
       const items = [look.theme, look.frame, look.nameStyle, look.effect, look.banner, look.plate];
       for (const id of [...items, ...look.badges].filter(Boolean)) {

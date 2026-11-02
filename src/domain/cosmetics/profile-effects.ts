@@ -104,6 +104,21 @@ export const PROFILE_EFFECTS: Readonly<Record<string, ProfileEffectSpec>> = {
     size: 32,
     gap: 400,
   },
+  // Permanent Essenciais effects: quiet weather for every season.
+  "efeito-estrelas": {
+    icon: "estrela",
+    motion: "fall",
+    icons: ["estrela", "brilho"],
+    count: 14,
+    size: FALL_SIZE,
+  },
+  "efeito-folhas-calmas": {
+    icon: "folha",
+    motion: "fall",
+    icons: ["folha", "folhaEscura"],
+    count: 16,
+    size: FALL_SIZE,
+  },
 };
 
 export function profileEffect(id: string | null | undefined): ProfileEffectSpec | null {

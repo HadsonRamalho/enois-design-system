@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EditorSticker } from "../../../types/domain/post/editor-sticker.js";
 import type { MentionTextareaHandle } from "../../../types/domain/post/mention-textarea-handle.js";
 
-import { fieldIn, selectText, selectionOf, typeInto, valueOf } from "./editor-test-utils.js";
+import { fieldIn, selectText, selectionOf, typeInto, valueOf } from "./editor.fixture.js";
 import { MentionTextarea } from "./mention-textarea.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -232,5 +232,47 @@ describe("MentionTextarea maxLength with stickers", () => {
     typeInto(field, "KEKW abc");
     expect(changed).not.toHaveBeenCalled();
     expect(valueOf(field)).toBe("KEKW");
+  });
+});
+
+describe("MentionTextarea stickers without a resolvable image", () => {
+  function renderUnresolved(initial: string) {
+    function Unresolved() {
+      const [value, setText] = useState(initial);
+      return (
+        <MentionTextarea
+          value={value}
+          onChange={(next, ids) => {
+            setText(next);
+            changed(next, ids);
+          }}
+          stickers={{ KEKW: { url: "", alt: "KEKW laughing" } }}
+          mentionResults={[]}
+          onMentionQueryChange={() => undefined}
+        />
+      );
+    }
+    act(() => root.render(<Unresolved />));
+    return fieldIn(container);
+  }
+
+  it("removes one character with Backspace from a code that is only shown as text", () => {
+    const field = renderUnresolved("a KEKW");
+    selectText(field, 6);
+
+    press(field, "Backspace");
+
+    expect(field.querySelector("img")).toBeNull();
+    expect(changed).not.toHaveBeenCalledWith("a ", []);
+  });
+});
+
+describe("MentionTextarea copy without a selection", () => {
+  it("does not throw when the document has no selection range", () => {
+    const field = render({ initial: "oi KEKW" });
+    act(() => document.getSelection()?.removeAllRanges());
+    const event = new Event("copy", { bubbles: true, cancelable: true });
+
+    expect(() => act(() => void field.dispatchEvent(event))).not.toThrow();
   });
 });

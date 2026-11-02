@@ -44,6 +44,16 @@ export function readRangeText(range: Range): string {
   return nodeText(range.cloneContents());
 }
 
+/** The sticker whose code is `word`, if any. */
+function stickerFor(
+  stickers: Record<string, EditorSticker> | undefined,
+  word: string,
+): EditorSticker | undefined {
+  return stickers && Object.prototype.hasOwnProperty.call(stickers, word)
+    ? stickers[word]
+    : undefined;
+}
+
 /** Splits `text` into text and sticker segments; only whole whitespace-delimited words match. */
 export function segmentText(
   text: string,
@@ -61,8 +71,7 @@ export function segmentText(
   let cursor = 0;
   for (const match of text.matchAll(/\S+/g)) {
     const word = match[0];
-    const sticker =
-      stickers && Object.prototype.hasOwnProperty.call(stickers, word) ? stickers[word] : undefined;
+    const sticker = stickerFor(stickers, word);
     const src = sticker ? resolveUrl(sticker.url) : undefined;
     if (!sticker || !src) continue;
     pushText(text.slice(cursor, match.index));
@@ -219,6 +228,7 @@ export function stickerAdjacentTo(
   offset: number,
   direction: "backward" | "forward",
   stickers: Record<string, EditorSticker> | undefined,
+  resolveUrl: (url: string) => string | undefined,
 ): TextSelection | null {
   if (!stickers) return null;
   const probe = direction === "backward" ? offset - 1 : offset;
@@ -228,7 +238,8 @@ export function stickerAdjacentTo(
   let end = probe + 1;
   while (end < text.length && !/\s/.test(text[end])) end += 1;
   const word = text.slice(start, end);
-  return Object.prototype.hasOwnProperty.call(stickers, word) ? { start, end } : null;
+  const sticker = stickerFor(stickers, word);
+  return sticker && resolveUrl(sticker.url) ? { start, end } : null;
 }
 
 /**

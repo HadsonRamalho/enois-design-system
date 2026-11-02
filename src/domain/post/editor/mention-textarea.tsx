@@ -305,7 +305,7 @@ export function MentionTextarea({
       writeSelection(el, previous.start, previous.end);
       return;
     }
-    if (next === "" && el.childNodes.length > 0) el.replaceChildren();
+    if (next === "" && el.childNodes.length > 0 && !composingRef.current) el.replaceChildren();
     const selection = readSelection(el);
     updateMention(next, selection?.end ?? next.length);
     changeValue(next);
@@ -393,7 +393,7 @@ export function MentionTextarea({
   ) => {
     const selection = currentSelection();
     if (selection.start !== selection.end) return;
-    const range = stickerAdjacentTo(value, selection.start, direction, stickers);
+    const range = stickerAdjacentTo(value, selection.start, direction, stickers, resolveMediaUrl);
     if (!range) return;
     e.preventDefault();
     applyEdit(
@@ -484,7 +484,8 @@ export function MentionTextarea({
   const handleCopy = (event: ClipboardEvent<HTMLDivElement>, cut: boolean) => {
     const el = fieldRef.current;
     const selection = el ? readSelection(el) : null;
-    const range = el?.ownerDocument.getSelection()?.getRangeAt(0);
+    const domSelection = el?.ownerDocument.getSelection();
+    const range = domSelection && domSelection.rangeCount > 0 ? domSelection.getRangeAt(0) : null;
     if (!selection || !range || selection.start === selection.end) return;
     event.preventDefault();
     event.clipboardData.setData("text/plain", readRangeText(range));

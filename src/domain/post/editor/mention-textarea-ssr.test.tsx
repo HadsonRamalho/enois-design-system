@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EditorSticker } from "../../../types/domain/post/editor-sticker.js";
 
-import { fieldIn, selectText, typeInto, valueOf } from "./editor-test-utils.js";
+import { fieldIn, selectText, typeInto, valueOf } from "./editor.fixture.js";
 import { MentionTextarea } from "./mention-textarea.js";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

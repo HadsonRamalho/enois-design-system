@@ -1,5 +1,6 @@
 import type { EditorSegment } from "../../../types/domain/post/editor-segment.js";
 import type { EditorSticker } from "../../../types/domain/post/editor-sticker.js";
+import type { TextSelectionEnds } from "../../../types/domain/post/text-selection-ends.js";
 import type { TextSelection } from "../../../types/domain/post/text-selection.js";
 
 /**
@@ -154,11 +155,21 @@ export function renderSegments(root: HTMLElement, segments: EditorSegment[]): vo
 }
 
 /**
- * A line break at the very end of a pre-wrap box has no height until something follows it: the
- * sentinel gives the caret that last line. It carries no text.
+ * Whether the last line needs the sentinel: a line break at the very end of a pre-wrap box has no
+ * height until something follows it, and a sticker at the very end leaves the caret nowhere to
+ * stand (browsers drop it at the edge of the non-editable span, where typing is lost).
  */
+export function needsTrailingBreak(segments: EditorSegment[]): boolean {
+  const last = segments[segments.length - 1];
+  return last !== undefined && (last.kind === "sticker" || last.text.endsWith("\n"));
+}
+
+/** Keeps the sentinel `<br>` in step with `needsTrailingBreak`. It carries no text. */
 export function syncTrailingBreak(root: HTMLElement): void {
-  const needed = readText(root).endsWith("\n");
+  const content = Array.from(root.childNodes).filter((child) => !isSentinel(child));
+  const lastContent = content[content.length - 1];
+  const needed =
+    lastContent !== undefined && (isStickerNode(lastContent) || readText(root).endsWith("\n"));
   const last = root.lastChild;
   const present = last !== null && isSentinel(last);
   if (needed && !present) {
@@ -209,17 +220,48 @@ export function readSelection(root: HTMLElement): TextSelection | null {
   };
 }
 
-/** Selects `start`..`end` (text offsets). */
-export function writeSelection(root: HTMLElement, start: number, end: number): void {
+/** The selection inside `root` with its direction, or null when it is elsewhere. */
+export function readSelectionEnds(root: HTMLElement): TextSelectionEnds | null {
+  const selection = root.ownerDocument.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const { anchorNode, focusNode } = selection;
+  if (!anchorNode || !focusNode || !root.contains(anchorNode) || !root.contains(focusNode)) {
+    return null;
+  }
+  return {
+    anchor: offsetAt(root, anchorNode, selection.anchorOffset),
+    focus: offsetAt(root, focusNode, selection.focusOffset),
+  };
+}
+
+/** Selects from `anchor` to `focus` (text offsets); `focus` may come before `anchor`. */
+export function writeSelectionEnds(root: HTMLElement, anchor: number, focus: number): void {
   const selection = root.ownerDocument.getSelection();
   if (!selection) return;
-  const from = locate(root, start);
-  const to = locate(root, end);
-  const range = root.ownerDocument.createRange();
-  range.setStart(from.node, from.offset);
-  range.setEnd(to.node, to.offset);
-  selection.removeAllRanges();
-  selection.addRange(range);
+  const from = locate(root, anchor);
+  const to = locate(root, focus);
+  selection.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+}
+
+/** Selects `start`..`end` (text offsets). */
+export function writeSelection(root: HTMLElement, start: number, end: number): void {
+  writeSelectionEnds(root, start, end);
+}
+
+/**
+ * True when a sticker is in the field and either end of the selection sits between nodes of the
+ * field (next to a sticker) instead of inside a text node. Native typing there is unreliable.
+ */
+export function selectionOnNodeBoundary(root: HTMLElement): boolean {
+  if (!root.querySelector(`[${STICKER_ATTRIBUTE}]`)) return false;
+  const selection = root.ownerDocument.getSelection();
+  if (!selection || selection.rangeCount === 0) return false;
+  const range = selection.getRangeAt(0);
+  if (!root.contains(range.startContainer) || !root.contains(range.endContainer)) return false;
+  return (
+    range.startContainer.nodeType !== Node.TEXT_NODE ||
+    range.endContainer.nodeType !== Node.TEXT_NODE
+  );
 }
 
 /** The sticker whose code spans `offset - 1` (backward) or `offset` (forward), as a text range. */
@@ -240,6 +282,23 @@ export function stickerAdjacentTo(
   const word = text.slice(start, end);
   const sticker = stickerFor(stickers, word);
   return sticker && resolveUrl(sticker.url) ? { start, end } : null;
+}
+
+/**
+ * Where an arrow key moves the caret from `offset` when a sticker is the next character in that
+ * direction: across the whole sticker, as one character. Null when there is no sticker there and
+ * the browser should move as usual.
+ */
+export function stepOverSticker(
+  text: string,
+  offset: number,
+  direction: "backward" | "forward",
+  stickers: Record<string, EditorSticker> | undefined,
+  resolveUrl: (url: string) => string | undefined,
+): number | null {
+  const range = stickerAdjacentTo(text, offset, direction, stickers, resolveUrl);
+  if (!range) return null;
+  return direction === "backward" ? range.start : range.end;
 }
 
 /**

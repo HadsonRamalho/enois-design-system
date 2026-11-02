@@ -106,6 +106,14 @@ field.current?.focus();
 its neighbours are not whitespace, goes through the same mention reconciliation as a typed edit and
 does nothing past `maxLength`. It replaces `querySelector("textarea")` plus `selectionStart`.
 
+The field keeps its own history, because redrawing the DOM wipes the browser's undo stack:
+Ctrl/Cmd+Z undoes, Ctrl/Cmd+Shift+Z and Ctrl+Y redo, and the `historyUndo`/`historyRedo` input events
+(Edit menu, phone) do the same. Consecutive typing, or consecutive deleting, is one step; a sticker,
+a mention, an emoji, a paste, a cut and a format each are a step. Undo and redo go through `onChange`
+(with the mentioned ids restored) and never exceed `maxLength`. The history is dropped when the
+parent replaces `value` with something the field did not write (clearing the draft, for example).
+ArrowLeft/ArrowRight (and with Shift) cross a sticker as one character.
+
 ### Profile garden
 
 `ProfileGarden` (domain) draws a profile's reputation as a small static garden: the tree is

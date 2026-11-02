@@ -7,6 +7,7 @@ import {
   STICKER_ATTRIBUTE,
   STICKER_CLASS,
   STICKER_IMAGE_CLASS,
+  needsTrailingBreak,
 } from "./editor-dom.js";
 
 /**
@@ -15,7 +16,7 @@ import {
  * browser code would draw. Afterwards the field is drawn by `renderSegments`; this tree is built
  * once and kept, so React never reconciles it against the nodes that code replaces.
  */
-export function initialContent(segments: EditorSegment[], endsWithBreak: boolean): ReactNode[] {
+export function initialContent(segments: EditorSegment[]): ReactNode[] {
   const nodes: ReactNode[] = segments.map((segment, index) =>
     segment.kind === "text" ? (
       segment.text
@@ -36,6 +37,7 @@ export function initialContent(segments: EditorSegment[], endsWithBreak: boolean
       </span>
     ),
   );
-  if (endsWithBreak) nodes.push(<br key="trailing-break" {...{ [SENTINEL_ATTRIBUTE]: "" }} />);
+  if (needsTrailingBreak(segments))
+    nodes.push(<br key="trailing-break" {...{ [SENTINEL_ATTRIBUTE]: "" }} />);
   return nodes;
 }

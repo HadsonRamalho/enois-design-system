@@ -21,6 +21,8 @@ import { parseRichText } from "../../../lib/rich-text/parse.js";
 import { isSubmitShortcut } from "../../../lib/submit-shortcut.js";
 import { useMessages } from "../../../messages/messages-context.js";
 import { RichTextToolbar } from "../../../patterns/editor/rich-text-toolbar.js";
+import type { EditorEditKind } from "../../../types/domain/post/editor-edit-kind.js";
+import type { EditorHistorySnapshot } from "../../../types/domain/post/editor-history-snapshot.js";
 import type { MentionTextareaProps } from "../../../types/domain/post/mention-textarea-props.js";
 import type { MentionUser } from "../../../types/domain/post/mention-user.js";
 import type { TextSelection } from "../../../types/domain/post/text-selection.js";
@@ -34,13 +36,18 @@ import {
   matchesSegments,
   readRangeText,
   readSelection,
+  readSelectionEnds,
   readText,
   renderSegments,
   segmentText,
+  selectionOnNodeBoundary,
+  stepOverSticker,
   stickerAdjacentTo,
   syncTrailingBreak,
   writeSelection,
+  writeSelectionEnds,
 } from "./editor-dom.js";
+import { createHistory, recordEdit, resetHistory, stepHistory } from "./editor-history.js";
 import { initialContent } from "./initial-content.js";
 
 /** Altura mínima da caixa, em linhas de texto, para dar espaço de revisar o que foi escrito. */
@@ -52,6 +59,14 @@ const MIN_ROWS = 4;
 function stickyHeaderBottom(node: HTMLElement): number {
   const header = node.ownerDocument.querySelector("header.sticky");
   return header?.getBoundingClientRect().bottom ?? 0;
+}
+
+/** The history step an `input` event belongs to; unknown kinds are a step of their own. */
+function editKindOf(inputType: string): EditorEditKind {
+  if (inputType === "" || inputType === "insertText" || inputType === "insertCompositionText") {
+    return "insert";
+  }
+  return inputType.startsWith("deleteContent") ? "delete" : "step";
 }
 
 /** Atalhos de teclado da formatacao; `mod` e Ctrl no Windows/Linux e Cmd no Mac. */
@@ -101,11 +116,17 @@ export function MentionTextarea({
   // A selection to put back once the next value is drawn; `focus` also gives the field the focus.
   const pendingSelectionRef = useRef<(TextSelection & { focus: boolean }) | null>(null);
   const composingRef = useRef(false);
+  const [history] = useState(createHistory);
+  // The value this component last committed; a different `value` came from outside.
+  const committedValueRef = useRef(value);
+  // Where the caret was just before the browser edited the field (set by `beforeinput`).
+  const beforeInputSelectionRef = useRef<TextSelection | null>(null);
+  const beforeInputHandlerRef = useRef<(event: InputEvent) => void>(() => undefined);
   // Browsers without `contenteditable="plaintext-only"` insert block elements on Enter instead.
   const blockEnterRef = useRef(false);
   // Drawn once, for the server markup and hydration; see `initialContent`.
   const [firstContent] = useState(() =>
-    initialContent(segmentText(value, stickers, resolveMediaUrl), value.endsWith("\n")),
+    initialContent(segmentText(value, stickers, resolveMediaUrl)),
   );
   const [, setRedrawCount] = useState(0);
   const [mentionQuery, setMentionQuery] = useState("");
@@ -129,6 +150,11 @@ export function MentionTextarea({
   // something rich was pasted. The caret is kept by text offset.
   useLayoutEffect(() => {
     const el = fieldRef.current;
+    if (value !== committedValueRef.current) {
+      // The parent replaced the text (cleared the draft, loaded another one): old steps are stale.
+      committedValueRef.current = value;
+      resetHistory(history);
+    }
     if (!el || composingRef.current) return;
 
     const segments = segmentText(value, stickers, resolveMediaUrl);
@@ -256,6 +282,7 @@ export function MentionTextarea({
   };
 
   const changeValue = (next: string, selected = mentions) => {
+    committedValueRef.current = next;
     const retained = retainMentions(next, selected);
     setMentions(retained);
     onChange(
@@ -273,8 +300,30 @@ export function MentionTextarea({
     return { start: Math.min(selection.start, end), end };
   };
 
+  /** Puts the edit that is about to be committed into the history. */
+  const record = (
+    kind: EditorEditKind,
+    next: string,
+    caret: number,
+    beforeSelection = currentSelection(),
+  ) => {
+    recordEdit(
+      history,
+      kind,
+      { value, selection: beforeSelection, mentions },
+      { value: next, caret },
+    );
+  };
+
   /** Commits an edit: the new value goes up and the selection is put back once it is drawn. */
-  const applyEdit = (next: string, selection: TextSelection, focus: boolean) => {
+  const applyEdit = (
+    next: string,
+    selection: TextSelection,
+    focus: boolean,
+    kind: EditorEditKind = "step",
+    beforeSelection?: TextSelection,
+  ) => {
+    record(kind, next, selection.end, beforeSelection);
     pendingSelectionRef.current = { ...selection, focus };
     updateMention(next, selection.end);
     changeValue(next);
@@ -288,10 +337,12 @@ export function MentionTextarea({
     const next = readText(el);
     const isLineBreak = inputType === "insertParagraph" || inputType === "insertLineBreak";
     const caret = readSelection(el)?.end;
+    const beforeSelection = beforeInputSelectionRef.current ?? undefined;
+    beforeInputSelectionRef.current = null;
     if (isLineBreak && caret !== undefined) {
       const collapsed = collapseDoubleBreak(value, next, caret);
       if (collapsed !== next) {
-        applyEdit(collapsed, { start: caret - 1, end: caret - 1 }, true);
+        applyEdit(collapsed, { start: caret - 1, end: caret - 1 }, true, "step", beforeSelection);
         return;
       }
     }
@@ -307,6 +358,7 @@ export function MentionTextarea({
     }
     if (next === "" && el.childNodes.length > 0 && !composingRef.current) el.replaceChildren();
     const selection = readSelection(el);
+    record(editKindOf(inputType), next, selection?.end ?? next.length, beforeSelection);
     updateMention(next, selection?.end ?? next.length);
     changeValue(next);
   };
@@ -321,6 +373,7 @@ export function MentionTextarea({
     setMentionQuery("");
     setMentionIndex(-1);
     const caret = before.length + user.username.length + 2;
+    record("step", next, caret);
     pendingSelectionRef.current = { start: caret, end: caret, focus: true };
     changeValue(
       next,
@@ -387,6 +440,88 @@ export function MentionTextarea({
     },
   }));
 
+  /** Undo or redo one step: goes through `onChange` and mention reconciliation like any edit. */
+  const moveInHistory = (direction: "undo" | "redo") => {
+    const current: EditorHistorySnapshot = { value, selection: currentSelection(), mentions };
+    const target = stepHistory(
+      history,
+      direction,
+      current,
+      (candidate) => maxLength === undefined || candidate.value.length <= maxLength,
+    );
+    if (!target) return;
+    const focused = fieldRef.current?.ownerDocument.activeElement === fieldRef.current;
+    pendingSelectionRef.current = { ...target.selection, focus: focused };
+    updateMention(target.value, target.selection.end);
+    changeValue(target.value, target.mentions);
+    setRedrawCount((count) => count + 1);
+  };
+
+  /**
+   * ArrowLeft/ArrowRight step over a sticker as one character. The browser's own move around a
+   * non-editable span takes extra presses or gets stuck at its edge, so the move is done here
+   * whenever a sticker is next (and for a collapse of a selection, which would end at that edge).
+   */
+  const moveAcrossSticker = (e: KeyboardEvent<HTMLDivElement>) => {
+    const el = fieldRef.current;
+    const ends = el ? readSelectionEnds(el) : null;
+    if (!el || !ends || !stickers) return;
+    const direction = e.key === "ArrowLeft" ? "backward" : "forward";
+    if (e.shiftKey) {
+      const target = stepOverSticker(value, ends.focus, direction, stickers, resolveMediaUrl);
+      if (target === null) return;
+      e.preventDefault();
+      writeSelectionEnds(el, ends.anchor, target);
+      return;
+    }
+    if (ends.anchor !== ends.focus) {
+      e.preventDefault();
+      const edges = [ends.anchor, ends.focus];
+      const edge = direction === "backward" ? Math.min(...edges) : Math.max(...edges);
+      writeSelection(el, edge, edge);
+      return;
+    }
+    const target = stepOverSticker(value, ends.focus, direction, stickers, resolveMediaUrl);
+    if (target === null) return;
+    e.preventDefault();
+    writeSelection(el, target, target);
+  };
+
+  /** Typing next to a sticker is done here: the browser may drop it at the span's edge. */
+  const handleBeforeInput = (event: InputEvent) => {
+    const el = fieldRef.current;
+    if (!el) return;
+    if (event.inputType === "historyUndo" || event.inputType === "historyRedo") {
+      event.preventDefault();
+      moveInHistory(event.inputType === "historyUndo" ? "undo" : "redo");
+      return;
+    }
+    beforeInputSelectionRef.current = readSelection(el);
+    const typed = event.inputType === "insertText" && event.data !== null && !event.isComposing;
+    if (!typed || !selectionOnNodeBoundary(el)) return;
+    event.preventDefault();
+    const selection = currentSelection();
+    const next = value.slice(0, selection.start) + event.data + value.slice(selection.end);
+    if (maxLength !== undefined && next.length > maxLength) return;
+    const caret = selection.start + event.data.length;
+    applyEdit(next, { start: caret, end: caret }, true, "insert", selection);
+  };
+
+  useLayoutEffect(() => {
+    beforeInputHandlerRef.current = handleBeforeInput;
+  });
+
+  // React has no native `beforeinput` with `inputType`, so it is listened to here.
+  useEffect(() => {
+    const el = fieldRef.current;
+    if (!el) return;
+    const listener = (event: Event) => {
+      if (event instanceof InputEvent) beforeInputHandlerRef.current(event);
+    };
+    el.addEventListener("beforeinput", listener);
+    return () => el.removeEventListener("beforeinput", listener);
+  }, []);
+
   const deleteStickerAtCaret = (
     e: KeyboardEvent<HTMLDivElement>,
     direction: "backward" | "forward",
@@ -409,6 +544,16 @@ export function MentionTextarea({
       e.preventDefault();
       onSubmitShortcut();
       return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.nativeEvent.isComposing) {
+      const key = e.key.toLowerCase();
+      if (key === "z" || (key === "y" && e.ctrlKey)) {
+        // Always ours: the native stack is wiped by every redraw of the field.
+        e.preventDefault();
+        moveInHistory(key === "z" && !e.shiftKey ? "undo" : "redo");
+        return;
+      }
     }
 
     if (toolbar && (e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -449,6 +594,15 @@ export function MentionTextarea({
     if (e.key === "Enter" && blockEnterRef.current) {
       e.preventDefault();
       insertText("\n", false);
+      return;
+    }
+    if (
+      (e.key === "ArrowLeft" || e.key === "ArrowRight") &&
+      !e.ctrlKey &&
+      !e.metaKey &&
+      !e.altKey
+    ) {
+      moveAcrossSticker(e);
       return;
     }
     if (e.key === "Backspace") deleteStickerAtCaret(e, "backward");

@@ -47,15 +47,15 @@ describe("MentionTextarea: server markup", () => {
   });
 
   it("renders a sticker as an image with its alt text", () => {
-    const html = renderToString(<Field initial="so funny KEKW lol" />);
+    const html = renderToString(<Field initial="so funny :KEKW: lol" />);
 
     expect(html).toContain('src="https://cdn.example.test/kekw.webp"');
     expect(html).toContain('alt="KEKW laughing"');
-    expect(html).toContain('data-sticker-code="KEKW"');
+    expect(html).toContain('data-sticker-code=":KEKW:"');
   });
 
   it("hydrates without warnings and keeps editing working", () => {
-    const initial = "so funny KEKW lol\n";
+    const initial = "so funny :KEKW: lol\n";
     const host = document.createElement("div");
     document.body.append(host);
     host.innerHTML = renderToString(<Field initial={initial} />);
@@ -70,8 +70,8 @@ describe("MentionTextarea: server markup", () => {
     expect(valueOf(field)).toBe(initial);
     expect(field.querySelector("img")?.getAttribute("alt")).toBe("KEKW laughing");
 
-    typeInto(field, "so funny KEKW lol\nnext");
-    expect(changed).toHaveBeenLastCalledWith("so funny KEKW lol\nnext", []);
+    typeInto(field, "so funny :KEKW: lol\nnext");
+    expect(changed).toHaveBeenLastCalledWith("so funny :KEKW: lol\nnext", []);
     expect(field.querySelectorAll("img")).toHaveLength(1);
   });
 });

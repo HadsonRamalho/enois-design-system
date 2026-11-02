@@ -59,7 +59,7 @@ function Field({
             key={code}
             type="button"
             className="rounded-full border border-border px-3 py-1 text-xs"
-            onClick={() => field.current?.insertAtCaret(code)}
+            onClick={() => field.current?.insertAtCaret(`:${code}:`)}
           >
             Inserir {code}
           </button>
@@ -72,12 +72,12 @@ function Field({
 }
 
 export const WithStickers: StoryObj = {
-  render: () => <Field initial="Que jogo KEKW mas depois Sadge" />,
+  render: () => <Field initial="Que jogo :KEKW: mas depois :Sadge:, e KEKW solto continua texto" />,
 };
 
 export const WithoutStickers: StoryObj = {
   render: () => (
-    <Field initial="Sem mapa de figurinhas: KEKW continua texto" withStickers={false} />
+    <Field initial="Sem mapa de figurinhas: :KEKW: continua texto" withStickers={false} />
   ),
 };
 
@@ -86,5 +86,5 @@ export const Empty: StoryObj = {
 };
 
 export const NearLimit: StoryObj = {
-  render: () => <Field initial="KEKW KEKW KEKW" maxLength={20} />,
+  render: () => <Field initial=":KEKW: :KEKW: :KEKW:" maxLength={26} />,
 };

@@ -45,6 +45,12 @@ export function readRangeText(range: Range): string {
   return nodeText(range.cloneContents());
 }
 
+/**
+ * `:KEKW:`, the only form that becomes a sticker: a plain word that happens to be a code ("Pedro")
+ * stays a word. Same shape the app reads posts with: no whitespace, colon, brackets or backtick.
+ */
+const STICKER_TOKEN = /:([^\s:[\]`]{1,64}):/gu;
+
 /** The sticker whose code is `word`, if any. */
 function stickerFor(
   stickers: Record<string, EditorSticker> | undefined,
@@ -55,7 +61,24 @@ function stickerFor(
     : undefined;
 }
 
-/** Splits `text` into text and sticker segments; only whole whitespace-delimited words match. */
+/** Every `:code:` in `text` that is a known sticker with a usable image. */
+function stickerTokens(
+  text: string,
+  stickers: Record<string, EditorSticker> | undefined,
+  resolveUrl: (url: string) => string | undefined,
+) {
+  const tokens: { start: number; end: number; sticker: EditorSticker; src: string }[] = [];
+  if (!stickers) return tokens;
+  for (const match of text.matchAll(STICKER_TOKEN)) {
+    const sticker = stickerFor(stickers, match[1]);
+    const src = sticker ? resolveUrl(sticker.url) : undefined;
+    if (!sticker || !src) continue;
+    tokens.push({ start: match.index, end: match.index + match[0].length, sticker, src });
+  }
+  return tokens;
+}
+
+/** Splits `text` into text and sticker segments; a sticker is a `:code:` token (`:KEKW:`). */
 export function segmentText(
   text: string,
   stickers: Record<string, EditorSticker> | undefined,
@@ -70,14 +93,10 @@ export function segmentText(
   };
 
   let cursor = 0;
-  for (const match of text.matchAll(/\S+/g)) {
-    const word = match[0];
-    const sticker = stickerFor(stickers, word);
-    const src = sticker ? resolveUrl(sticker.url) : undefined;
-    if (!sticker || !src) continue;
-    pushText(text.slice(cursor, match.index));
-    segments.push({ kind: "sticker", code: word, src, alt: sticker.alt });
-    cursor = match.index + word.length;
+  for (const { start, end, sticker, src } of stickerTokens(text, stickers, resolveUrl)) {
+    pushText(text.slice(cursor, start));
+    segments.push({ kind: "sticker", code: text.slice(start, end), src, alt: sticker.alt });
+    cursor = end;
   }
   pushText(text.slice(cursor));
   return segments;
@@ -272,16 +291,12 @@ export function stickerAdjacentTo(
   stickers: Record<string, EditorSticker> | undefined,
   resolveUrl: (url: string) => string | undefined,
 ): TextSelection | null {
-  if (!stickers) return null;
   const probe = direction === "backward" ? offset - 1 : offset;
-  if (probe < 0 || probe >= text.length || /\s/.test(text[probe])) return null;
-  let start = probe;
-  while (start > 0 && !/\s/.test(text[start - 1])) start -= 1;
-  let end = probe + 1;
-  while (end < text.length && !/\s/.test(text[end])) end += 1;
-  const word = text.slice(start, end);
-  const sticker = stickerFor(stickers, word);
-  return sticker && resolveUrl(sticker.url) ? { start, end } : null;
+  if (probe < 0 || probe >= text.length) return null;
+  const token = stickerTokens(text, stickers, resolveUrl).find(
+    ({ start, end }) => start <= probe && probe < end,
+  );
+  return token ? { start: token.start, end: token.end } : null;
 }
 
 /**

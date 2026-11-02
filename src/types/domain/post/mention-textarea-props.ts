@@ -26,8 +26,9 @@ export type MentionTextareaProps = Pick<
   /** Users matching the current @mention term (the app searches from two characters on). */
   mentionResults: MentionUser[];
   /**
-   * Stickers by code. A whitespace-delimited word equal to a code is drawn as an inline image that
-   * the caret skips and Backspace/Delete remove whole; the value and `onChange` keep the plain code.
+   * Stickers by bare code (`KEKW`). Each `:code:` token in the text (`:KEKW:`) is drawn as an inline
+   * image that the caret skips and Backspace/Delete remove whole; the value and `onChange` keep the
+   * `:code:` text. A plain word equal to a code stays text.
    * Without it the field shows text only.
    */
   stickers?: Record<string, EditorSticker>;

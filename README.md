@@ -84,10 +84,12 @@ The field is a `contenteditable` element (`role="textbox"`, `aria-multiline`), n
 tests and app code query `[role="textbox"]`, and there is no `selectionStart`. `value` and
 `onChange(value, mentionedUserIds)` are unchanged and the value stays plain text.
 
-Pass `stickers` (code to `{ url, alt }`) and any whitespace-delimited word equal to a code is drawn
-as an inline image (`url` goes through `useAdapters().resolveMediaUrl`). The image is atomic: the
-caret skips it, Backspace/Delete remove it whole and copy/cut give the code. Without `stickers` the
-field shows text only.
+Pass `stickers` (code to `{ url, alt }`, keyed by the bare code: `KEKW`) and every `:code:` token in
+the text (`:KEKW:`, also glued to other text or to another sticker) is drawn as an inline image
+(`url` goes through `useAdapters().resolveMediaUrl`). A plain word that happens to be a code stays a
+word. This is the same rule the app uses to read posts (Rede-ENois/enois-frontend#556). The image is
+atomic: the caret skips it, Backspace/Delete remove it whole and copy/cut give `:code:`. Without
+`stickers` the field shows text only.
 
 To insert text where the person was writing (for example from a sticker dialog), keep a `ref`:
 

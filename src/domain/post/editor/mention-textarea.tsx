@@ -285,7 +285,7 @@ export function MentionTextarea({
   const readFromDom = (inputType = "") => {
     const el = fieldRef.current;
     if (!el) return;
-    let next = readText(el);
+    const next = readText(el);
     const isLineBreak = inputType === "insertParagraph" || inputType === "insertLineBreak";
     const caret = readSelection(el)?.end;
     if (isLineBreak && caret !== undefined) {

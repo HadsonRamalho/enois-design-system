@@ -8,10 +8,10 @@ import type { TextSelection } from "../../../types/domain/post/text-selection.js
  * its code. Everything here is DOM plumbing; the component owns the state.
  */
 
-const STICKER_ATTRIBUTE = "data-sticker-code";
-const SENTINEL_ATTRIBUTE = "data-trailing-break";
-const STICKER_CLASS = "mx-px inline-block select-none align-middle";
-const STICKER_IMAGE_CLASS = "inline-block h-[1.75em] w-auto max-w-none align-middle";
+export const STICKER_ATTRIBUTE = "data-sticker-code";
+export const SENTINEL_ATTRIBUTE = "data-trailing-break";
+export const STICKER_CLASS = "mx-px inline-block select-none align-middle";
+export const STICKER_IMAGE_CLASS = "inline-block h-[1.75em] w-auto max-w-none align-middle";
 
 const isElement = (node: Node): node is Element => node.nodeType === Node.ELEMENT_NODE;
 const isStickerNode = (node: Node): node is HTMLElement =>
@@ -229,4 +229,19 @@ export function stickerAdjacentTo(
   while (end < text.length && !/\s/.test(text[end])) end += 1;
   const word = text.slice(start, end);
   return Object.prototype.hasOwnProperty.call(stickers, word) ? { start, end } : null;
+}
+
+/**
+ * Some browsers put two line breaks in a `plaintext-only` field when Enter is pressed at the end of
+ * the text (one for the break, one for the placeholder that gives the last line a height). One
+ * paragraph insert must add exactly one `\n`: this drops the extra one and returns the text as is
+ * for every other edit.
+ */
+export function collapseDoubleBreak(previous: string, next: string, caret: number): string {
+  const doubled = next.slice(caret - 2, caret) === "\n\n";
+  const gainedTwo = next.length === previous.length + 2;
+  if (!doubled || !gainedTwo) return next;
+  const collapsed = next.slice(0, caret - 1) + next.slice(caret);
+  const expected = `${previous.slice(0, caret - 2)}\n${previous.slice(caret - 2)}`;
+  return collapsed === expected ? collapsed : next;
 }

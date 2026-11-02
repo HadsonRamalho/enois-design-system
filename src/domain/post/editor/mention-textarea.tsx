@@ -30,6 +30,7 @@ import { CharCounter } from "../../../ui/char-counter.js";
 import { UserAvatar } from "../../avatar/user-avatar.js";
 
 import {
+  collapseDoubleBreak,
   matchesSegments,
   readRangeText,
   readSelection,
@@ -40,6 +41,7 @@ import {
   syncTrailingBreak,
   writeSelection,
 } from "./editor-dom.js";
+import { initialContent } from "./initial-content.js";
 
 /** Altura mínima da caixa, em linhas de texto, para dar espaço de revisar o que foi escrito. */
 const MIN_ROWS = 4;
@@ -101,6 +103,10 @@ export function MentionTextarea({
   const composingRef = useRef(false);
   // Browsers without `contenteditable="plaintext-only"` insert block elements on Enter instead.
   const blockEnterRef = useRef(false);
+  // Drawn once, for the server markup and hydration; see `initialContent`.
+  const [firstContent] = useState(() =>
+    initialContent(segmentText(value, stickers, resolveMediaUrl), value.endsWith("\n")),
+  );
   const [, setRedrawCount] = useState(0);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionIndex, setMentionIndex] = useState(-1);
@@ -276,10 +282,19 @@ export function MentionTextarea({
   };
 
   /** Reads what the person did to the DOM (typing, IME, undo, a native delete). */
-  const readFromDom = () => {
+  const readFromDom = (inputType = "") => {
     const el = fieldRef.current;
     if (!el) return;
-    const next = readText(el);
+    let next = readText(el);
+    const isLineBreak = inputType === "insertParagraph" || inputType === "insertLineBreak";
+    const caret = readSelection(el)?.end;
+    if (isLineBreak && caret !== undefined) {
+      const collapsed = collapseDoubleBreak(value, next, caret);
+      if (collapsed !== next) {
+        applyEdit(collapsed, { start: caret - 1, end: caret - 1 }, true);
+        return;
+      }
+    }
     const overLimit = maxLength !== undefined && next.length > maxLength;
     if (overLimit && composingRef.current) return;
     if (overLimit) {
@@ -508,7 +523,12 @@ export function MentionTextarea({
         suppressContentEditableWarning
         data-placeholder={placeholder}
         data-max-length={maxLength}
-        onInput={readFromDom}
+        onInput={(event) => {
+          const native = event.nativeEvent;
+          readFromDom(
+            "inputType" in native && typeof native.inputType === "string" ? native.inputType : "",
+          );
+        }}
         onKeyDown={handleKey}
         onPaste={handlePaste}
         onCopy={(event) => handleCopy(event, false)}
@@ -518,7 +538,9 @@ export function MentionTextarea({
         }}
         onCompositionEnd={endComposition}
         className={`max-h-[240px] w-full min-w-0 overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] ${className}`}
-      />
+      >
+        {firstContent}
+      </div>
 
       {/* Mesmo contador de todo campo com limite (Input/Textarea usam o CharCounter via withCounter):
           um so lugar decide o aviso de "perto do limite" e o "limite atingido". */}

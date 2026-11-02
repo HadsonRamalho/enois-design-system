@@ -77,20 +77,24 @@ const typeNative = (field: HTMLElement, data: string) => {
 
 describe("stepOverSticker", () => {
   it("jumps across the whole code in either direction and ignores plain text", () => {
-    expect(stepOverSticker("a KEKW b", 2, "forward", stickers, resolve)).toBe(6);
-    expect(stepOverSticker("a KEKW b", 6, "backward", stickers, resolve)).toBe(2);
-    expect(stepOverSticker("a KEKW b", 1, "forward", stickers, resolve)).toBeNull();
-    expect(stepOverSticker("a KEKW b", 7, "backward", stickers, resolve)).toBeNull();
-    expect(stepOverSticker("KEKW", 0, "backward", stickers, resolve)).toBeNull();
-    expect(stepOverSticker("KEKW", 4, "forward", stickers, resolve)).toBeNull();
+    expect(stepOverSticker("a :KEKW: b", 2, "forward", stickers, resolve)).toBe(8);
+    expect(stepOverSticker("a :KEKW: b", 8, "backward", stickers, resolve)).toBe(2);
+    expect(stepOverSticker("a :KEKW: b", 1, "forward", stickers, resolve)).toBeNull();
+    expect(stepOverSticker("a :KEKW: b", 9, "backward", stickers, resolve)).toBeNull();
+    expect(stepOverSticker(":KEKW:", 0, "backward", stickers, resolve)).toBeNull();
+    expect(stepOverSticker(":KEKW:", 6, "forward", stickers, resolve)).toBeNull();
+    // A bare code is a word, not a sticker (Rede-ENois/enois-frontend#556).
+    expect(stepOverSticker("a KEKW b", 2, "forward", stickers, resolve)).toBeNull();
+    // Glued stickers are two stickers.
+    expect(stepOverSticker(":KEKW::KEKW:", 6, "forward", stickers, resolve)).toBe(12);
   });
 });
 
 describe("MentionTextarea arrows around a sticker", () => {
   it.each([
-    ["start", "KEKW tchau", 0, 4],
-    ["middle", "oi KEKW tchau", 3, 7],
-    ["end", "oi KEKW", 3, 7],
+    ["start", ":KEKW: tchau", 0, 6],
+    ["middle", "oi :KEKW: tchau", 3, 9],
+    ["end", "oi :KEKW:", 3, 9],
   ])("ArrowRight crosses a sticker at the %s as one character", (_, text, from, to) => {
     const field = render(text);
     selectText(field, from);
@@ -99,9 +103,9 @@ describe("MentionTextarea arrows around a sticker", () => {
   });
 
   it.each([
-    ["start", "KEKW tchau", 4, 0],
-    ["middle", "oi KEKW tchau", 7, 3],
-    ["end", "oi KEKW", 7, 3],
+    ["start", ":KEKW: tchau", 6, 0],
+    ["middle", "oi :KEKW: tchau", 9, 3],
+    ["end", "oi :KEKW:", 9, 3],
   ])("ArrowLeft crosses a sticker at the %s as one character", (_, text, from, to) => {
     const field = render(text);
     selectText(field, from);
@@ -110,81 +114,81 @@ describe("MentionTextarea arrows around a sticker", () => {
   });
 
   it("leaves arrows to the browser when no sticker is next", () => {
-    const field = render("oi KEKW");
+    const field = render("oi :KEKW:");
     selectText(field, 1);
     expect(arrow(field, "ArrowRight").defaultPrevented).toBe(false);
   });
 
   it("types after crossing a sticker at the end: the text lands at the end of the value", () => {
-    const field = render("oi KEKW");
-    selectText(field, 7);
+    const field = render("oi :KEKW:");
+    selectText(field, 9);
     arrow(field, "ArrowLeft");
     arrow(field, "ArrowRight");
-    expect(selectionOf(field)).toEqual({ start: 7, end: 7 });
+    expect(selectionOf(field)).toEqual({ start: 9, end: 9 });
 
     // The caret stands between nodes, next to the sticker: typing is handled by the field.
     expect(typeNative(field, "x").defaultPrevented).toBe(true);
-    expect(changed).toHaveBeenLastCalledWith("oi KEKWx");
-    expect(valueOf(field)).toBe("oi KEKWx");
-    expect(selectionOf(field)).toEqual({ start: 8, end: 8 });
+    expect(changed).toHaveBeenLastCalledWith("oi :KEKW:x");
+    expect(valueOf(field)).toBe("oi :KEKW:x");
+    expect(selectionOf(field)).toEqual({ start: 10, end: 10 });
   });
 
   it("leaves typing to the browser when the caret ends up inside a text node", () => {
-    const field = render("KEKW tchau");
+    const field = render(":KEKW: tchau");
     selectText(field, 0);
     arrow(field, "ArrowRight");
-    expect(selectionOf(field)).toEqual({ start: 4, end: 4 });
+    expect(selectionOf(field)).toEqual({ start: 6, end: 6 });
     expect(typeNative(field, "!").defaultPrevented).toBe(false);
   });
 
   it("types right before a sticker that starts the text", () => {
-    const field = render("KEKW tchau");
-    selectText(field, 4);
+    const field = render(":KEKW: tchau");
+    selectText(field, 6);
     arrow(field, "ArrowLeft");
     expect(selectionOf(field)).toEqual({ start: 0, end: 0 });
     expect(typeNative(field, "x").defaultPrevented).toBe(true);
-    expect(valueOf(field)).toBe("xKEKW tchau");
+    expect(valueOf(field)).toBe("x:KEKW: tchau");
     expect(selectionOf(field)).toEqual({ start: 1, end: 1 });
   });
 
   it("keeps a sticker at the end typeable: the field keeps a place for the caret after it", () => {
-    const field = render("oi KEKW");
+    const field = render("oi :KEKW:");
     expect(field.lastElementChild?.hasAttribute("data-trailing-break")).toBe(true);
-    expect(valueOf(field)).toBe("oi KEKW");
+    expect(valueOf(field)).toBe("oi :KEKW:");
   });
 
   it("lets the browser type inside a text node", () => {
-    const field = render("oi KEKW");
+    const field = render("oi :KEKW:");
     selectText(field, 1);
     expect(typeNative(field, "x").defaultPrevented).toBe(false);
   });
 
   it("honours maxLength when typing next to a sticker", () => {
-    const field = render("KEKW", 4);
-    selectText(field, 4);
+    const field = render(":KEKW:", 6);
+    selectText(field, 6);
     typeNative(field, "x");
-    expect(valueOf(field)).toBe("KEKW");
+    expect(valueOf(field)).toBe(":KEKW:");
     expect(changed).not.toHaveBeenCalled();
   });
 
   it("Shift+ArrowRight and Shift+ArrowLeft select the sticker as one character", () => {
-    const field = render("oi KEKW tchau");
+    const field = render("oi :KEKW: tchau");
     selectText(field, 3);
     expect(arrow(field, "ArrowRight", true).defaultPrevented).toBe(true);
-    expect(selectionOf(field)).toEqual({ start: 3, end: 7 });
+    expect(selectionOf(field)).toEqual({ start: 3, end: 9 });
 
-    selectText(field, 7);
+    selectText(field, 9);
     arrow(field, "ArrowLeft", true);
-    expect(selectionOf(field)).toEqual({ start: 3, end: 7 });
+    expect(selectionOf(field)).toEqual({ start: 3, end: 9 });
   });
 
   it("collapses a selection to its edge with a plain arrow", () => {
-    const field = render("oi KEKW tchau");
-    selectText(field, 3, 7);
+    const field = render("oi :KEKW: tchau");
+    selectText(field, 3, 9);
     arrow(field, "ArrowRight");
-    expect(selectionOf(field)).toEqual({ start: 7, end: 7 });
+    expect(selectionOf(field)).toEqual({ start: 9, end: 9 });
 
-    selectText(field, 3, 7);
+    selectText(field, 3, 9);
     arrow(field, "ArrowLeft");
     expect(selectionOf(field)).toEqual({ start: 3, end: 3 });
   });

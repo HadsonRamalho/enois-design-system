@@ -399,7 +399,7 @@ export function MentionTextarea({
 
   /**
    * Replaces the selection with `text`. `spaced` keeps the text apart from its neighbours with
-   * spaces, so a sticker code stays a word. Over `maxLength` nothing changes. The caret lands after
+   * spaces, so the raw text stays readable. Over `maxLength` nothing changes. The caret lands after
    * the insert; the field takes the focus only if it had it (a dialog may be open over it).
    */
   const insertText = (text: string, spaced: boolean, selection = currentSelection()): boolean => {

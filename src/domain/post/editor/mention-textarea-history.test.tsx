@@ -120,9 +120,9 @@ describe("MentionTextarea history", () => {
     const field = render();
     typeInto(field, "oi");
     act(() => {
-      handle.current?.insertAtCaret("KEKW");
+      handle.current?.insertAtCaret(":KEKW:");
     });
-    expect(valueOf(field)).toBe("oi KEKW");
+    expect(valueOf(field)).toBe("oi :KEKW:");
 
     undo(field);
     expect(valueOf(field)).toBe("oi");
@@ -131,7 +131,7 @@ describe("MentionTextarea history", () => {
     expect(valueOf(field)).toBe("");
     redo(field);
     redo(field);
-    expect(valueOf(field)).toBe("oi KEKW");
+    expect(valueOf(field)).toBe("oi :KEKW:");
     expect(field.querySelector("img")).not.toBeNull();
   });
 
@@ -160,22 +160,22 @@ describe("MentionTextarea history", () => {
 
   it("undoes a cut in one step and a sticker deletion in one step", () => {
     const field = render();
-    typeInto(field, "abc KEKW");
+    typeInto(field, "abc :KEKW:");
     selectText(field, 0, 3);
     const cut = new Event("cut", { bubbles: true, cancelable: true });
     Object.defineProperty(cut, "clipboardData", { value: { setData: () => undefined } });
     act(() => {
       field.dispatchEvent(cut);
     });
-    expect(valueOf(field)).toBe(" KEKW");
+    expect(valueOf(field)).toBe(" :KEKW:");
     undo(field);
-    expect(valueOf(field)).toBe("abc KEKW");
+    expect(valueOf(field)).toBe("abc :KEKW:");
 
-    selectText(field, 8);
+    selectText(field, 10);
     key(field, "Backspace");
     expect(valueOf(field)).toBe("abc ");
     undo(field);
-    expect(valueOf(field)).toBe("abc KEKW");
+    expect(valueOf(field)).toBe("abc :KEKW:");
     expect(field.querySelector("img")).not.toBeNull();
   });
 

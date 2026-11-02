@@ -68,43 +68,49 @@ const press = (field: HTMLElement, key: string) => {
 };
 
 describe("MentionTextarea stickers", () => {
-  it("draws a code that is a whole word as an image, keeping the code as the value", () => {
-    const field = render({ initial: "oi KEKW tchau" });
+  it("draws a :code: token as an image, keeping the code as the value", () => {
+    const field = render({ initial: "oi :KEKW: tchau" });
 
     const image = field.querySelector("img");
     expect(image?.getAttribute("src")).toBe(stickers.KEKW.url);
     expect(image?.getAttribute("alt")).toBe("KEKW laughing");
     expect(field.querySelector("[contenteditable='false']")).not.toBeNull();
-    expect(valueOf(field)).toBe("oi KEKW tchau");
+    expect(valueOf(field)).toBe("oi :KEKW: tchau");
   });
 
-  it("leaves a code inside a longer word as text", () => {
-    const field = render({ initial: "xKEKW KEKWs" });
+  it("leaves a bare code as text, so a common word is never a sticker by accident", () => {
+    const field = render({ initial: "oi KEKW xKEKW KEKWs" });
     expect(field.querySelector("img")).toBeNull();
+  });
+
+  it("draws glued tokens and a token glued to text", () => {
+    const field = render({ initial: "kkk:KEKW::Pog:!" });
+    expect(field.querySelectorAll("img")).toHaveLength(2);
+    expect(valueOf(field)).toBe("kkk:KEKW::Pog:!");
   });
 
   it("shows only text when no stickers are given", () => {
-    const field = render({ initial: "oi KEKW", withStickers: false });
+    const field = render({ initial: "oi :KEKW:", withStickers: false });
     expect(field.querySelector("img")).toBeNull();
-    expect(field.textContent).toBe("oi KEKW");
+    expect(field.textContent).toBe("oi :KEKW:");
   });
 
-  it("turns a typed code into an image once the word is complete", () => {
+  it("turns a typed code into an image once the closing colon is typed", () => {
     const field = render();
-    typeInto(field, "Pog ");
-    expect(changed).toHaveBeenLastCalledWith("Pog ", []);
+    typeInto(field, ":Pog:");
+    expect(changed).toHaveBeenLastCalledWith(":Pog:", []);
     expect(field.querySelectorAll("img")).toHaveLength(1);
-    expect(selectionOf(field)).toEqual({ start: 4, end: 4 });
+    expect(selectionOf(field)).toEqual({ start: 5, end: 5 });
   });
 
   it("removes the whole sticker with Backspace and with Delete", () => {
-    const field = render({ initial: "a KEKW b" });
-    selectText(field, 6);
+    const field = render({ initial: "a :KEKW: b" });
+    selectText(field, 8);
     expect(press(field, "Backspace").defaultPrevented).toBe(true);
     expect(changed).toHaveBeenLastCalledWith("a  b", []);
     expect(field.querySelector("img")).toBeNull();
 
-    act(() => root.render(<Field initial="a KEKW b" />));
+    act(() => root.render(<Field initial="a :KEKW: b" />));
     const again = fieldIn(container);
     selectText(again, 2);
     press(again, "Delete");
@@ -112,28 +118,28 @@ describe("MentionTextarea stickers", () => {
   });
 
   it("deletes a single character when the caret is not next to a sticker", () => {
-    const field = render({ initial: "a KEKW b" });
-    selectText(field, 7);
+    const field = render({ initial: "a :KEKW: b" });
+    selectText(field, 9);
     expect(press(field, "Backspace").defaultPrevented).toBe(false);
   });
 
   it("never lets the caret land inside a sticker", () => {
-    const field = render({ initial: "KEKW" });
-    selectText(field, 2);
+    const field = render({ initial: ":KEKW:" });
+    selectText(field, 3);
     const selection = selectionOf(field)!;
-    expect([0, 4]).toContain(selection.start);
+    expect([0, 6]).toContain(selection.start);
   });
 
   it("copies the code of a selected sticker", () => {
-    const field = render({ initial: "a KEKW b" });
-    selectText(field, 0, 8);
+    const field = render({ initial: "a :KEKW: b" });
+    selectText(field, 0, 10);
     const setData = vi.fn();
     const event = new Event("copy", { bubbles: true, cancelable: true });
     Object.assign(event, { clipboardData: { setData } });
     act(() => {
       field.dispatchEvent(event);
     });
-    expect(setData).toHaveBeenCalledWith("text/plain", "a KEKW b");
+    expect(setData).toHaveBeenCalledWith("text/plain", "a :KEKW: b");
     expect(event.defaultPrevented).toBe(true);
   });
 
@@ -159,9 +165,9 @@ describe("MentionTextarea insertAtCaret", () => {
     const field = render({ initial: "ab" });
     selectText(field, 1);
     act(() => {
-      expect(handle.current?.insertAtCaret("KEKW")).toBe(true);
+      expect(handle.current?.insertAtCaret(":KEKW:")).toBe(true);
     });
-    expect(changed).toHaveBeenLastCalledWith("a KEKW b", []);
+    expect(changed).toHaveBeenLastCalledWith("a :KEKW: b", []);
     expect(field.querySelector("img")).not.toBeNull();
   });
 
@@ -180,9 +186,9 @@ describe("MentionTextarea insertAtCaret", () => {
     const field = fieldIn(container);
     selectText(field, 0, 3);
     act(() => {
-      handle.current?.insertAtCaret("KEKW");
+      handle.current?.insertAtCaret(":KEKW:");
     });
-    expect(changed).toHaveBeenLastCalledWith("KEKW", []);
+    expect(changed).toHaveBeenLastCalledWith(":KEKW:", []);
   });
 
   it("keeps inserting at the last caret after the selection left the field", () => {
@@ -211,27 +217,27 @@ describe("MentionTextarea insertAtCaret", () => {
     render({ initial: "abcdef", maxLength: 8 });
     let inserted = true;
     act(() => {
-      inserted = handle.current?.insertAtCaret("KEKW") ?? true;
+      inserted = handle.current?.insertAtCaret(":KEKW:") ?? true;
     });
     expect(inserted).toBe(false);
     expect(changed).not.toHaveBeenCalled();
   });
 
   it("inserts exactly at maxLength", () => {
-    render({ initial: "ab", maxLength: 7 });
+    render({ initial: "ab", maxLength: 9 });
     act(() => {
-      handle.current?.insertAtCaret("KEKW");
+      handle.current?.insertAtCaret(":KEKW:");
     });
-    expect(changed).toHaveBeenLastCalledWith("ab KEKW", []);
+    expect(changed).toHaveBeenLastCalledWith("ab :KEKW:", []);
   });
 });
 
 describe("MentionTextarea maxLength with stickers", () => {
   it("counts the code, not the image, and restores the text when typing goes over", () => {
-    const field = render({ initial: "KEKW", maxLength: 6 });
-    typeInto(field, "KEKW abc");
+    const field = render({ initial: ":KEKW:", maxLength: 8 });
+    typeInto(field, ":KEKW: abc");
     expect(changed).not.toHaveBeenCalled();
-    expect(valueOf(field)).toBe("KEKW");
+    expect(valueOf(field)).toBe(":KEKW:");
   });
 });
 
@@ -257,8 +263,8 @@ describe("MentionTextarea stickers without a resolvable image", () => {
   }
 
   it("removes one character with Backspace from a code that is only shown as text", () => {
-    const field = renderUnresolved("a KEKW");
-    selectText(field, 6);
+    const field = renderUnresolved("a :KEKW:");
+    selectText(field, 8);
 
     press(field, "Backspace");
 
@@ -269,7 +275,7 @@ describe("MentionTextarea stickers without a resolvable image", () => {
 
 describe("MentionTextarea copy without a selection", () => {
   it("does not throw when the document has no selection range", () => {
-    const field = render({ initial: "oi KEKW" });
+    const field = render({ initial: "oi :KEKW:" });
     act(() => document.getSelection()?.removeAllRanges());
     const event = new Event("copy", { bubbles: true, cancelable: true });
 
